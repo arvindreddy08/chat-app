@@ -44,7 +44,7 @@ function App() {
   };
 
   const joinRoom = () => {
-    if (room.trim()) setLoggedIn(true);
+    if (room.trim().length >= 2) setLoggedIn(true);
   };
 
   if (loggedIn && room) {
@@ -62,6 +62,7 @@ function App() {
             placeholder="Enter room name..."
             value={room}
             onChange={(e) => setRoom(e.target.value)}
+  onKeyPress={(e) => e.key === 'Enter' && joinRoom()}
           />
           <button onClick={joinRoom}>Join Room</button>
         </div>
