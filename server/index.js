@@ -12,7 +12,7 @@ app.use(express.json());
 
 const JWT_SECRET = 'chat_secret_key_123';
 
-mongoose.connect('mongodb+srv://chatuser:Chat1234!@cluster0.oxx18we.mongodb.net/chatapp?appName=Cluster0')
+mongoose.connect(process.env.MONGO_URL || 'mongodb+srv://chatuser:Chat1234!@cluster0.oxx18we.mongodb.net/chatapp?appName=Cluster0')
   .then(() => console.log('MongoDB connected!'))
   .catch(err => console.log('MongoDB error:', err));
 
