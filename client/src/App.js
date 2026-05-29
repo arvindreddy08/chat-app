@@ -12,7 +12,7 @@ function App() {
 
   const handleRegister = async () => {
     if (!username.trim() || !password.trim()) return;
-    const res = await fetch('https://chat-app-production-a5c0.up.railway.app/register', {
+    const res = await fetch('https://chat-app-ymm4.onrender.com/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
@@ -28,7 +28,7 @@ function App() {
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) return;
-    const res = await fetch('https://chat-app-production-a5c0.up.railway.app/login', {
+    const res = await fetch('https://chat-app-ymm4.onrender.com/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
