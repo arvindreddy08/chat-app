@@ -7,6 +7,7 @@ function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [room, setRoom] = useState('');
+  const [joined, setJoined] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [error, setError] = useState('');
 
@@ -35,36 +36,39 @@ function App() {
     });
     const data = await res.json();
     if (data.success) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('username', data.username);
       setLoggedIn(true);
     } else {
       setError(data.message);
     }
   };
 
-  const joinRoom = () => {
-    if (room.trim().length >= 2) setLoggedIn(true);
+  const handleJoinRoom = () => {
+    if (room.trim().length >= 2) {
+      setJoined(true);
+    } else {
+      setError('Room name must be at least 2 characters!');
+    }
   };
 
-  if (loggedIn && room) {
+  if (loggedIn && joined) {
     return <Chat username={username} room={room} />;
   }
 
-  if (loggedIn && !room) {
+  if (loggedIn && !joined) {
     return (
       <div className="join-container">
         <div className="join-box">
           <h1>💬 Live Chat</h1>
           <p style={{color:'#00d4ff'}}>Welcome, {username}! 👋</p>
+          {error && <p style={{color: '#ff6b6b', fontSize: '13px'}}>{error}</p>}
           <input
             type="text"
-            placeholder="Enter room name..."
+            placeholder="Enter room name (min 2 chars)..."
             value={room}
             onChange={(e) => setRoom(e.target.value)}
-  onKeyPress={(e) => e.key === 'Enter' && joinRoom()}
+            onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
           />
-          <button onClick={joinRoom}>Join Room</button>
+          <button onClick={handleJoinRoom}>Join Room</button>
         </div>
       </div>
     );
