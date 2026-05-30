@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('https://chat-app-production-a5c0.up.railway.app');
+const socket = io('https://chat-app-ymm4.onrender.com');
 const EMOJIS = ['👍','❤️','😂','😮','😢','🔥'];
 
 function Chat({ username, room }) {
