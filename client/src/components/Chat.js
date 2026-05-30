@@ -41,7 +41,7 @@ function Chat({ username, room }) {
   const [editText, setEditText] = useState('');
   const [mutedRooms, setMutedRooms] = useState([]);
   const [bubbleColor, setBubbleColor] = useState(BUBBLE_COLORS[0]);
-  const [showColorPicker, setShowColorPicker] = useState(false);
+  
   const [notifications, setNotifications] = useState([]);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
