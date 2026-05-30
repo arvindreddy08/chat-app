@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 const JWT_SECRET = 'chat_secret_key_123';
 
@@ -27,6 +27,13 @@ const messageSchema = new mongoose.Schema({
   message: String,
   room: String,
   reactions: { type: Map, of: [String], default: {} },
+  fileUrl: String,
+  fileType: String,
+  fileName: String,
+  replyTo: { _id: String, username: String, message: String },
+  edited: { type: Boolean, default: false },
+  deleted: { type: Boolean, default: false },
+  readBy: [String],
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -59,14 +66,10 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.get('/messages/:room', async (req, res) => {
-  const messages = await Message.find({ room: req.params.room }).sort({ createdAt: 1 }).limit(50);
-  res.json(messages);
-});
-
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+  maxHttpBufferSize: 1e7
 });
 
 const users = {};
@@ -82,25 +85,73 @@ io.on('connection', (socket) => {
     io.to(room).emit('receive_message', {
       username: 'System',
       message: `${username} joined the room!`,
-      time: new Date().toLocaleTimeString()
+      time: new Date().toLocaleTimeString(),
+      date: new Date().toISOString()
     });
     const roomUsers = Object.values(users).filter(u => u.room === room);
     io.to(room).emit('room_users', roomUsers);
   });
 
-  socket.on('send_message', async ({ message, room }) => {
+  socket.on('send_message', async ({ message, room, replyTo }) => {
     const user = users[socket.id];
     if (user) {
       const time = new Date().toLocaleTimeString();
-      const newMsg = new Message({ username: user.username, message, room });
+      const newMsg = new Message({ username: user.username, message, room, replyTo: replyTo || null });
       const saved = await newMsg.save();
       io.to(room).emit('receive_message', {
         _id: saved._id,
         username: user.username,
         message,
         time,
-        reactions: {}
+        date: saved.createdAt,
+        reactions: {},
+        replyTo: replyTo || null,
+        readBy: [],
       });
+    }
+  });
+
+  socket.on('send_file', async ({ room, fileName, fileType, fileData }) => {
+    const user = users[socket.id];
+    if (user) {
+      const time = new Date().toLocaleTimeString();
+      const newMsg = new Message({ username: user.username, room, fileUrl: fileData, fileType, fileName });
+      const saved = await newMsg.save();
+      io.to(room).emit('receive_message', {
+        _id: saved._id,
+        username: user.username,
+        fileUrl: fileData,
+        fileType,
+        fileName,
+        time,
+        date: saved.createdAt,
+        reactions: {},
+        readBy: [],
+      });
+    }
+  });
+
+  socket.on('edit_message', async ({ messageId, newMessage, room }) => {
+    const user = users[socket.id];
+    if (user) {
+      await Message.findByIdAndUpdate(messageId, { message: newMessage, edited: true });
+      io.to(room).emit('message_edited', { messageId, newMessage });
+    }
+  });
+
+  socket.on('delete_message', async ({ messageId, room }) => {
+    const user = users[socket.id];
+    if (user) {
+      await Message.findByIdAndUpdate(messageId, { deleted: true, message: '🗑️ Message deleted' });
+      io.to(room).emit('message_deleted', { messageId });
+    }
+  });
+
+  socket.on('mark_read', async ({ messageId, room }) => {
+    const user = users[socket.id];
+    if (user) {
+      await Message.findByIdAndUpdate(messageId, { $addToSet: { readBy: user.username } });
+      io.to(room).emit('message_read', { messageId, readerUsername: user.username });
     }
   });
 
@@ -143,7 +194,8 @@ io.on('connection', (socket) => {
       io.to(user.room).emit('receive_message', {
         username: 'System',
         message: `${user.username} left the room.`,
-        time: new Date().toLocaleTimeString()
+        time: new Date().toLocaleTimeString(),
+        date: new Date().toISOString()
       });
       delete users[socket.id];
       const roomUsers = Object.values(users).filter(u => u.room === user.room);
@@ -152,4 +204,4 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(5000, () => console.log('Server running on port 5000'));
+server.listen(process.env.PORT || 5000, () => console.log('Server running!'));
