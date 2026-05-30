@@ -28,27 +28,30 @@ function Chat({ username, room }) {
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioCtx = useRef(null);
+  const soundEnabledRef = useRef(soundEnabled);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const playSound = () => {
-    if (!soundEnabled) return;
-    try {
-      if (!audioCtx.current) audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioCtx.current.createOscillator();
-      const gainNode = audioCtx.current.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.current.destination);
-      oscillator.frequency.setValueAtTime(880, audioCtx.current.currentTime);
-      oscillator.frequency.setValueAtTime(660, audioCtx.current.currentTime + 0.1);
-      gainNode.gain.setValueAtTime(0.3, audioCtx.current.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.current.currentTime + 0.3);
-      oscillator.start(audioCtx.current.currentTime);
-      oscillator.stop(audioCtx.current.currentTime + 0.3);
-    } catch (e) {}
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    const playSound = () => {
+      if (!soundEnabledRef.current) return;
+      try {
+        if (!audioCtx.current) audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.current.createOscillator();
+        const gainNode = audioCtx.current.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.current.destination);
+        oscillator.frequency.setValueAtTime(880, audioCtx.current.currentTime);
+        oscillator.frequency.setValueAtTime(660, audioCtx.current.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.3, audioCtx.current.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.current.currentTime + 0.3);
+        oscillator.start(audioCtx.current.currentTime);
+        oscillator.stop(audioCtx.current.currentTime + 0.3);
+      } catch (e) {}
+    };
+
     socket.emit('join_room', { username, room });
 
     socket.on('message_history', (history) => {
@@ -251,27 +254,15 @@ function Chat({ username, room }) {
 
         <div style={styles.toggleRow}>
           <span style={{ fontSize: '13px' }}>{darkMode ? '🌙 Dark' : '☀️ Light'}</span>
-          <button
-            style={{ ...styles.toggle, background: darkMode ? theme.accent : '#ccc' }}
-            onClick={() => setDarkMode(!darkMode)}
-          >
-            <span style={{
-              position: 'absolute', top: '3px', left: darkMode ? '20px' : '3px',
-              width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.3s'
-            }} />
+          <button style={{ ...styles.toggle, background: darkMode ? theme.accent : '#ccc' }} onClick={() => setDarkMode(!darkMode)}>
+            <span style={{ position: 'absolute', top: '3px', left: darkMode ? '20px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.3s' }} />
           </button>
         </div>
 
         <div style={styles.toggleRow}>
           <span style={{ fontSize: '13px' }}>{soundEnabled ? '🔔 Sound On' : '🔕 Sound Off'}</span>
-          <button
-            style={{ ...styles.toggle, background: soundEnabled ? theme.accent : '#ccc' }}
-            onClick={() => setSoundEnabled(!soundEnabled)}
-          >
-            <span style={{
-              position: 'absolute', top: '3px', left: soundEnabled ? '20px' : '3px',
-              width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.3s'
-            }} />
+          <button style={{ ...styles.toggle, background: soundEnabled ? theme.accent : '#ccc' }} onClick={() => setSoundEnabled(!soundEnabled)}>
+            <span style={{ position: 'absolute', top: '3px', left: soundEnabled ? '20px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.3s' }} />
           </button>
         </div>
 
@@ -295,21 +286,14 @@ function Chat({ username, room }) {
 
       <div style={styles.chatBox}>
         <div style={styles.topBar}>
-          <span style={{ fontWeight: 600, fontSize: '15px' }}>
-            {showPrivate ? '💬 Private Messages' : `# ${room}`}
-          </span>
+          <span style={{ fontWeight: 600, fontSize: '15px' }}>{showPrivate ? '💬 Private Messages' : `# ${room}`}</span>
           <div style={{ flex: 1 }} />
           <button style={styles.iconBtn} onClick={() => setShowSearch(!showSearch)}>🔍</button>
         </div>
 
         {showSearch && (
           <div style={{ padding: '8px 16px', borderBottom: `1px solid ${theme.border}` }}>
-            <input
-              style={styles.searchInput}
-              placeholder="Search messages..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
+            <input style={styles.searchInput} placeholder="Search messages..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
         )}
 
@@ -327,19 +311,8 @@ function Chat({ username, room }) {
               ))}
             </div>
             <div style={styles.inputRow}>
-              <input
-                style={{ ...styles.input, width: '100px', flex: 'none' }}
-                placeholder="To..."
-                value={privateTo}
-                onChange={e => setPrivateTo(e.target.value)}
-              />
-              <input
-                style={styles.input}
-                placeholder="Private message..."
-                value={privateMsg}
-                onChange={e => setPrivateMsg(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && sendPrivate()}
-              />
+              <input style={{ ...styles.input, width: '100px', flex: 'none' }} placeholder="To..." value={privateTo} onChange={e => setPrivateTo(e.target.value)} />
+              <input style={styles.input} placeholder="Private message..." value={privateMsg} onChange={e => setPrivateMsg(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendPrivate()} />
               <button style={styles.sendBtn} onClick={sendPrivate}>Send</button>
             </div>
           </div>
@@ -388,8 +361,7 @@ function Chat({ username, room }) {
               {showEmojiPicker && (
                 <div style={styles.emojiPicker}>
                   {ALL_EMOJIS.map(emoji => (
-                    <span key={emoji} style={{ fontSize: '20px', cursor: 'pointer' }}
-                      onClick={() => { setMessage(prev => prev + emoji); setShowEmojiPicker(false); }}>
+                    <span key={emoji} style={{ fontSize: '20px', cursor: 'pointer' }} onClick={() => { setMessage(prev => prev + emoji); setShowEmojiPicker(false); }}>
                       {emoji}
                     </span>
                   ))}
@@ -399,13 +371,7 @@ function Chat({ username, room }) {
                 <button style={styles.iconBtn} onClick={() => setShowEmojiPicker(!showEmojiPicker)}>😊</button>
                 <button style={styles.iconBtn} onClick={() => fileInputRef.current.click()}>📎</button>
                 <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
-                <input
-                  style={styles.input}
-                  placeholder="Type a message..."
-                  value={message}
-                  onChange={handleTyping}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                />
+                <input style={styles.input} placeholder="Type a message..." value={message} onChange={handleTyping} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} />
                 <button style={styles.sendBtn} onClick={sendMessage}>Send</button>
               </div>
             </div>
