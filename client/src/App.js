@@ -1,6 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Chat from './components/Chat';
 import './App.css';
+
+function usePWAInstall() {
+  const [prompt, setPrompt] = useState(null);
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+  const install = async () => { if (prompt) { prompt.prompt(); setPrompt(null); } };
+  return { prompt, install };
+}
 
 const PARTICLES = Array.from({length: 15}, (_, i) => ({
   id: i,
@@ -23,6 +34,7 @@ function App() {
   const [profile, setProfile] = useState({ avatar: '', bio: 'Hey! I am using LiveChat 👋' });
   const [showProfile, setShowProfile] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState('');
+  const { prompt: installPrompt, install } = usePWAInstall();
 
   const handleRegister = async () => {
     if (!username.trim() || !password.trim()) return;
@@ -79,7 +91,7 @@ function App() {
     title: { color: '#fff', fontSize: '32px', fontWeight: 900, textAlign: 'center', marginBottom: '6px', background: 'linear-gradient(135deg, #f093fb, #4facfe)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' },
     subtitle: { color: 'rgba(255,255,255,0.6)', fontSize: '14px', textAlign: 'center', marginBottom: '28px' },
     tabs: { display: 'flex', gap: '6px', marginBottom: '24px', background: 'rgba(0,0,0,0.3)', borderRadius: '16px', padding: '5px' },
-    tab: { flex: 1, padding: '11px', borderRadius: '12px', border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '14px', fontWeight: 700, transition: 'all 0.2s' },
+    tab: { flex: 1, padding: '11px', borderRadius: '12px', border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '14px', fontWeight: 700 },
     activeTab: { flex: 1, padding: '11px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, rgba(240,147,251,0.4), rgba(79,172,254,0.4))', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: 800, boxShadow: '0 4px 15px rgba(240,147,251,0.3)' },
     input: { width: '100%', padding: '15px 20px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '16px', outline: 'none', marginBottom: '14px', WebkitAppearance: 'none' },
     btn: { width: '100%', padding: '16px', borderRadius: '16px', border: 'none', color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '17px', marginTop: '8px', boxShadow: '0 6px 25px rgba(240,147,251,0.5)', letterSpacing: '0.5px', touchAction: 'manipulation' },
@@ -133,11 +145,16 @@ function App() {
           <button style={s.btnSecondary} onClick={() => setShowProfile(true)}>✏️ Edit Profile</button>
           {error && <p style={{ ...s.error, color: '#ff6b6b', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', marginTop: '12px' }}>{error}</p>}
           <div style={{ marginTop: '16px' }}>
-            <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', fontWeight: 700, display: 'block', marginBottom: '8px' }}>🏠 ROOM NAME</label>
+            <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>🏠 ROOM NAME</label>
             <input className="input-field" style={s.input} type="text" placeholder="Enter room name..." value={room}
               onChange={(e) => setRoom(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()} />
           </div>
           <button className="btn-primary" style={s.btn} onClick={handleJoinRoom}>🚀 Join Room</button>
+          {installPrompt && (
+            <button style={{ ...s.btnSecondary, marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={install}>
+              📲 Install App
+            </button>
+          )}
         </div>
       </div>
     );
@@ -168,6 +185,11 @@ function App() {
         <button className="btn-primary" style={{ ...s.btn, opacity: loading ? 0.7 : 1 }} onClick={screen === 'login' ? handleLogin : handleRegister} disabled={loading}>
           {loading ? '⏳ Please wait...' : screen === 'login' ? '🚀 Login' : '🌟 Create Account'}
         </button>
+        {installPrompt && (
+          <button style={{ ...s.btnSecondary, marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={install}>
+            📲 Install App
+          </button>
+        )}
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center', marginTop: '20px' }}>
           {screen === 'login' ? "Don't have an account? " : "Already have an account? "}
           <span style={{ color: '#f093fb', cursor: 'pointer', fontWeight: 700 }} onClick={() => { setScreen(screen === 'login' ? 'register' : 'login'); setError(''); }}>
