@@ -29,6 +29,7 @@ function Chat({ username, room }) {
   const fileInputRef = useRef(null);
   const audioCtx = useRef(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const playSound = () => {
     if (!soundEnabled) return;
     try {
