@@ -215,7 +215,7 @@ function Chat({ username, room, profile, onEditProfile }) {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', height: '-webkit-fill-available', background: theme.bg, fontFamily: "'Segoe UI', sans-serif", color: theme.text, overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', height: '-webkit-fill-available', background: theme.bg, fontFamily: "'Segoe UI', sans-serif", color: theme.text, overflow: 'hidden', position: 'relative' }}>
 
       {/* NOTIFICATION */}
       {notifications.map((n, i) => (

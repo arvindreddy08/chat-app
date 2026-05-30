@@ -63,7 +63,7 @@ function App() {
 
   const s = {
     container: {
-      minHeight: '100vh', minHeight: '-webkit-fill-available',
+      minHeight: '-webkit-fill-available',
       background: 'linear-gradient(135deg, #0f1117 0%, #1a1f2e 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Segoe UI', sans-serif", padding: '16px', boxSizing: 'border-box',
