@@ -331,7 +331,7 @@ function Chat({ username, room, profile, onEditProfile }) {
                 );
                 const msg = item;
                 if (msg.username === 'System') return (
-                  <div key={i} style={{ textAlign: 'center', color: theme.text_muted, fontSize: '12px', padding: '4px 0', background: 'rgba(255,255,255,0.05)', borderRadius: '20px', padding: '6px 16px' }}>{msg.message}</div>
+                  <div key={i} style={{ textAlign: 'center', color: theme.text_muted, fontSize: '12px', padding: '4px 0', background: 'rgba(255,255,255,0.05)', borderRadius: '20px' }}>{msg.message}</div>
                 );
                 const isMe = msg.username === username;
                 const isRead = msg.readBy && msg.readBy.length > 0;
