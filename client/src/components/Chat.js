@@ -22,10 +22,11 @@ function formatDateSeparator(dateStr) {
   return d.toLocaleDateString();
 }
 
-function Chat({ username, room }) {
+function Chat({ username, room, profile, onEditProfile }) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
+  const [userProfiles, setUserProfiles] = useState({});
   const [typing, setTyping] = useState('');
   const [privateMsg, setPrivateMsg] = useState('');
   const [privateTo, setPrivateTo] = useState('');
@@ -41,7 +42,6 @@ function Chat({ username, room }) {
   const [editText, setEditText] = useState('');
   const [mutedRooms, setMutedRooms] = useState([]);
   const [bubbleColor, setBubbleColor] = useState(BUBBLE_COLORS[0]);
-  
   const [notifications, setNotifications] = useState([]);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -60,11 +60,16 @@ function Chat({ username, room }) {
     }
   };
 
-  const requestNotificationPermission = () => {
+  useEffect(() => {
     if ('Notification' in window) Notification.requestPermission();
-  };
+  }, []);
 
-  useEffect(() => { requestNotificationPermission(); }, []);
+  // Share profile with others when joining
+  useEffect(() => {
+    if (profile) {
+      socket.emit('share_profile', { username, room, avatar: profile.avatar, bio: profile.bio });
+    }
+  }, [username, room, profile]);
 
   useEffect(() => {
     const playSound = () => {
@@ -88,17 +93,10 @@ function Chat({ username, room }) {
 
     socket.on('message_history', (history) => {
       const formatted = history.map(m => ({
-        _id: m._id,
-        username: m.username,
-        message: m.message,
-        time: new Date(m.createdAt).toLocaleTimeString(),
-        date: m.createdAt,
-        reactions: m.reactions || {},
-        fileUrl: m.fileUrl,
-        fileType: m.fileType,
-        fileName: m.fileName,
-        replyTo: m.replyTo || null,
-        edited: m.edited || false,
+        _id: m._id, username: m.username, message: m.message,
+        time: new Date(m.createdAt).toLocaleTimeString(), date: m.createdAt,
+        reactions: m.reactions || {}, fileUrl: m.fileUrl, fileType: m.fileType,
+        fileName: m.fileName, replyTo: m.replyTo || null, edited: m.edited || false,
         readBy: m.readBy || [],
       }));
       setMessages(formatted);
@@ -109,17 +107,19 @@ function Chat({ username, room }) {
       if (data.username !== username && data.username !== 'System') {
         playSound();
         showNotification(`New message from ${data.username}`, data.message || '📎 File');
-        // Handle @mentions
         if (data.message && data.message.includes(`@${username}`)) {
           setNotifications(prev => [...prev, `${data.username} mentioned you!`]);
           setTimeout(() => setNotifications(prev => prev.slice(1)), 4000);
         }
       }
-      // Mark as read
       if (data._id) socket.emit('mark_read', { messageId: data._id, room });
     });
 
     socket.on('room_users', (data) => setUsers(data));
+
+    socket.on('user_profile', ({ username: u, avatar, bio }) => {
+      setUserProfiles(prev => ({ ...prev, [u]: { avatar, bio } }));
+    });
 
     socket.on('user_typing', (data) => {
       setTyping(`${data.username} is typing...`);
@@ -149,15 +149,11 @@ function Chat({ username, room }) {
     });
 
     return () => {
-      socket.off('message_history');
-      socket.off('receive_message');
-      socket.off('room_users');
-      socket.off('user_typing');
-      socket.off('update_reactions');
-      socket.off('private_msg');
-      socket.off('message_edited');
-      socket.off('message_deleted');
-      socket.off('message_read');
+      socket.off('message_history'); socket.off('receive_message');
+      socket.off('room_users'); socket.off('user_typing');
+      socket.off('update_reactions'); socket.off('private_msg');
+      socket.off('message_edited'); socket.off('message_deleted');
+      socket.off('message_read'); socket.off('user_profile');
     };
   }, [username, room]);
 
@@ -181,9 +177,7 @@ function Chat({ username, room }) {
     }
   };
 
-  const addReaction = (messageId, emoji) => {
-    socket.emit('add_reaction', { messageId, emoji, room });
-  };
+  const addReaction = (messageId, emoji) => socket.emit('add_reaction', { messageId, emoji, room });
 
   const handleTyping = (e) => {
     setMessage(e.target.value);
@@ -194,15 +188,8 @@ function Chat({ username, room }) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      socket.emit('send_file', { room, fileName: file.name, fileType: file.type, fileData: reader.result });
-    };
+    reader.onload = () => socket.emit('send_file', { room, fileName: file.name, fileType: file.type, fileData: reader.result });
     reader.readAsDataURL(file);
-  };
-
-  const handleEdit = (msg) => {
-    setEditingMsg(msg._id);
-    setEditText(msg.message);
   };
 
   const submitEdit = () => {
@@ -213,23 +200,12 @@ function Chat({ username, room }) {
     }
   };
 
-  const handleDelete = (messageId) => {
-    socket.emit('delete_message', { messageId, room });
-  };
+  const handleDelete = (messageId) => socket.emit('delete_message', { messageId, room });
+  const toggleMute = () => setMutedRooms(prev => prev.includes(room) ? prev.filter(r => r !== room) : [...prev, room]);
+  const insertMention = (name) => setMessage(prev => prev + `@${name} `);
 
-  const toggleMute = () => {
-    setMutedRooms(prev => prev.includes(room) ? prev.filter(r => r !== room) : [...prev, room]);
-  };
+  const filteredMessages = messages.filter(m => searchQuery ? m.message?.toLowerCase().includes(searchQuery.toLowerCase()) : true);
 
-  const insertMention = (name) => {
-    setMessage(prev => prev + `@${name} `);
-  };
-
-  const filteredMessages = messages.filter(m =>
-    searchQuery ? m.message?.toLowerCase().includes(searchQuery.toLowerCase()) : true
-  );
-
-  // Group messages by date
   const groupedMessages = [];
   let lastDate = null;
   filteredMessages.forEach(msg => {
@@ -254,13 +230,22 @@ function Chat({ username, room }) {
     accent: '#00d4ff',
   };
 
+  const renderAvatar = (uname, size = 30) => {
+    const prof = uname === username ? profile : userProfiles[uname];
+    const av = getAvatar(uname);
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', background: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.43, fontWeight: 700, color: '#fff', flexShrink: 0, overflow: 'hidden' }}>
+        {prof?.avatar ? <img src={prof.avatar} alt={uname} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : av.letter}
+      </div>
+    );
+  };
+
   const s = {
     container: { display: 'flex', height: '100vh', background: theme.bg, fontFamily: "'Segoe UI', sans-serif", color: theme.text, overflow: 'hidden' },
     sidebar: { width: '260px', background: theme.sidebar, borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', padding: '16px', gap: '8px', overflowY: 'auto' },
     roomTitle: { color: theme.accent, fontSize: '18px', fontWeight: 700, marginBottom: '4px' },
     sectionTitle: { color: theme.text_muted, fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', margin: '8px 0 4px' },
     userItem: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '8px', cursor: 'pointer' },
-    avatar: (u) => ({ width: '30px', height: '30px', borderRadius: '50%', background: getAvatar(u).color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: '#fff', flexShrink: 0 }),
     onlineDot: { width: '8px', height: '8px', borderRadius: '50%', background: '#2ecc71', flexShrink: 0 },
     sidebarBtn: { padding: '8px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.text, cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' },
     toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' },
@@ -275,7 +260,7 @@ function Chat({ username, room }) {
     bubble: (isMe, deleted) => ({ maxWidth: '65%', padding: '10px 14px', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: deleted ? theme.bubble_other : isMe ? theme.bubble_me : theme.bubble_other, color: isMe && !deleted ? '#000' : theme.text, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', border: isMe ? 'none' : `1px solid ${theme.border}` }),
     msgUsername: { fontSize: '11px', fontWeight: 700, color: theme.accent, marginBottom: '4px' },
     msgText: { fontSize: '14px', lineHeight: 1.4, wordBreak: 'break-word' },
-    msgTime: { fontSize: '10px', color: theme.text_muted, marginTop: '4px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' },
+    msgTime: { fontSize: '10px', color: theme.text_muted, marginTop: '4px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' },
     reactions: { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' },
     reactionBtn: { padding: '2px 6px', borderRadius: '12px', border: `1px solid ${theme.border}`, background: 'transparent', cursor: 'pointer', fontSize: '13px', color: theme.text },
     inputArea: { padding: '12px 16px', borderTop: `1px solid ${theme.border}`, background: theme.sidebar, display: 'flex', flexDirection: 'column', gap: '8px' },
@@ -289,15 +274,24 @@ function Chat({ username, room }) {
     actionBtn: { padding: '2px 8px', borderRadius: '8px', border: `1px solid ${theme.border}`, background: 'transparent', cursor: 'pointer', fontSize: '11px', color: theme.text_muted },
     notification: { position: 'fixed', top: '16px', right: '16px', background: theme.accent, color: '#000', padding: '10px 16px', borderRadius: '12px', fontWeight: 600, fontSize: '13px', zIndex: 9999, boxShadow: '0 4px 16px rgba(0,0,0,0.3)' },
     colorDot: (c) => ({ width: '20px', height: '20px', borderRadius: '50%', background: c, cursor: 'pointer', border: c === bubbleColor ? '2px solid white' : '2px solid transparent' }),
+    myProfile: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: theme.input_bg, borderRadius: '10px', marginBottom: '8px', cursor: 'pointer' },
   };
 
   return (
     <div style={s.container}>
-      {/* NOTIFICATIONS */}
       {notifications.map((n, i) => <div key={i} style={s.notification}>🔔 {n}</div>)}
 
-      {/* SIDEBAR */}
       <div style={s.sidebar}>
+        {/* My Profile */}
+        <div style={s.myProfile} onClick={onEditProfile}>
+          {renderAvatar(username, 36)}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: '14px', color: theme.text }}>{username}</div>
+            <div style={{ fontSize: '11px', color: theme.text_muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.bio || 'Click to edit profile'}</div>
+          </div>
+          <span style={{ fontSize: '16px' }}>✏️</span>
+        </div>
+
         <div style={s.roomTitle}>Room: {room}</div>
 
         <div style={s.toggleRow}>
@@ -321,7 +315,6 @@ function Chat({ username, room }) {
           </button>
         </div>
 
-        {/* Bubble Color Picker */}
         <div>
           <div style={s.sectionTitle}>My Bubble Color</div>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -332,12 +325,15 @@ function Chat({ username, room }) {
         <div style={s.sectionTitle}>Online Users</div>
         {users.map((user, i) => {
           const name = typeof user === 'string' ? user : user.username;
-          const av = getAvatar(name);
+          const prof = userProfiles[name];
           return (
             <div key={i} style={s.userItem}>
-              <div style={s.avatar(name)}>{av.letter}</div>
-              <div style={s.onlineDot} />
-              <span style={{ fontSize: '14px', flex: 1 }}>{name}</span>
+              {renderAvatar(name, 30)}
+              <div style={{ onlineDot: s.onlineDot }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 600 }}>{name}</div>
+                {prof?.bio && <div style={{ fontSize: '10px', color: theme.text_muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prof.bio}</div>}
+              </div>
               <button style={{ ...s.actionBtn, fontSize: '10px' }} onClick={() => insertMention(name)}>@</button>
             </div>
           );
@@ -348,7 +344,6 @@ function Chat({ username, room }) {
         </button>
       </div>
 
-      {/* CHAT AREA */}
       <div style={s.chatBox}>
         <div style={s.topBar}>
           <span style={{ fontWeight: 600, fontSize: '15px' }}>{showPrivate ? '💬 Private' : `# ${room}`}</span>
@@ -385,28 +380,21 @@ function Chat({ username, room }) {
           <>
             <div style={s.messages}>
               {groupedMessages.map((item, i) => {
-                if (item.type === 'separator') {
-                  return (
-                    <div key={i} style={s.dateSep}>
-                      <div style={s.dateLine} />
-                      <span>{item.date}</span>
-                      <div style={s.dateLine} />
-                    </div>
-                  );
-                }
+                if (item.type === 'separator') return (
+                  <div key={i} style={s.dateSep}>
+                    <div style={s.dateLine} /><span>{item.date}</span><div style={s.dateLine} />
+                  </div>
+                );
                 const msg = item;
                 if (msg.username === 'System') return <div key={i} style={s.systemMsg}>{msg.message}</div>;
                 const isMe = msg.username === username;
-                const av = getAvatar(msg.username);
                 const isRead = msg.readBy && msg.readBy.length > 0;
                 return (
                   <div key={i} style={s.msgWrapper(isMe)}>
-                    {!isMe && <div style={s.avatar(msg.username)}>{av.letter}</div>}
+                    {!isMe && renderAvatar(msg.username, 30)}
                     <div style={{ maxWidth: '65%' }}>
                       {msg.replyTo && (
-                        <div style={s.replyPreview}>
-                          ↩️ <b>{msg.replyTo.username}:</b> {msg.replyTo.message?.slice(0, 50)}
-                        </div>
+                        <div style={s.replyPreview}>↩️ <b>{msg.replyTo.username}:</b> {msg.replyTo.message?.slice(0, 50)}</div>
                       )}
                       <div style={s.bubble(isMe, msg.deleted)}>
                         {!isMe && <div style={s.msgUsername}>{msg.username}</div>}
@@ -417,17 +405,15 @@ function Chat({ username, room }) {
                             <button style={s.actionBtn} onClick={() => setEditingMsg(null)}>✕</button>
                           </div>
                         ) : (
-                          <>
-                            {msg.fileUrl ? (
-                              msg.fileType?.startsWith('image/') ? (
-                                <img src={msg.fileUrl} alt={msg.fileName} style={{ maxWidth: '200px', borderRadius: '8px' }} />
-                              ) : (
-                                <a href={msg.fileUrl} download={msg.fileName} style={{ color: theme.accent }}>📎 {msg.fileName}</a>
-                              )
+                          msg.fileUrl ? (
+                            msg.fileType?.startsWith('image/') ? (
+                              <img src={msg.fileUrl} alt={msg.fileName} style={{ maxWidth: '200px', borderRadius: '8px' }} />
                             ) : (
-                              <p style={s.msgText}>{msg.message}</p>
-                            )}
-                          </>
+                              <a href={msg.fileUrl} download={msg.fileName} style={{ color: theme.accent }}>📎 {msg.fileName}</a>
+                            )
+                          ) : (
+                            <p style={s.msgText}>{msg.message}</p>
+                          )
                         )}
                         <div style={s.msgTime}>
                           {msg.edited && <span style={{ fontSize: '9px' }}>(edited)</span>}
@@ -446,13 +432,13 @@ function Chat({ username, room }) {
                         {!msg.deleted && (
                           <div style={s.actionBtns}>
                             <button style={s.actionBtn} onClick={() => setReplyTo(msg)}>↩️ Reply</button>
-                            {isMe && <button style={s.actionBtn} onClick={() => handleEdit(msg)}>✏️ Edit</button>}
+                            {isMe && <button style={s.actionBtn} onClick={() => { setEditingMsg(msg._id); setEditText(msg.message); }}>✏️ Edit</button>}
                             {isMe && <button style={s.actionBtn} onClick={() => handleDelete(msg._id)}>🗑️ Delete</button>}
                           </div>
                         )}
                       </div>
                     </div>
-                    {isMe && <div style={s.avatar(msg.username)}>{av.letter}</div>}
+                    {isMe && renderAvatar(msg.username, 30)}
                   </div>
                 );
               })}
@@ -479,13 +465,7 @@ function Chat({ username, room }) {
                 <button style={s.iconBtn} onClick={() => setShowEmojiPicker(!showEmojiPicker)}>😊</button>
                 <button style={s.iconBtn} onClick={() => fileInputRef.current.click()}>📎</button>
                 <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
-                <input
-                  style={s.input}
-                  placeholder={isMuted ? '🔇 Room muted...' : 'Type a message... (@mention)'}
-                  value={message}
-                  onChange={handleTyping}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                />
+                <input style={s.input} placeholder={isMuted ? '🔇 Room muted...' : 'Type a message... (@mention)'} value={message} onChange={handleTyping} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} />
                 <button style={s.sendBtn} onClick={sendMessage}>Send</button>
               </div>
             </div>

@@ -19,17 +19,15 @@ mongoose.connect(process.env.MONGO_URL || 'mongodb+srv://chatuser:Chat1234!@clus
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true },
   password: String,
+  avatar: String,
+  bio: { type: String, default: 'Hey! I am using LiveChat 👋' },
   createdAt: { type: Date, default: Date.now }
 });
 
 const messageSchema = new mongoose.Schema({
-  username: String,
-  message: String,
-  room: String,
+  username: String, message: String, room: String,
   reactions: { type: Map, of: [String], default: {} },
-  fileUrl: String,
-  fileType: String,
-  fileName: String,
+  fileUrl: String, fileType: String, fileName: String,
   replyTo: { _id: String, username: String, message: String },
   edited: { type: Boolean, default: false },
   deleted: { type: Boolean, default: false },
@@ -60,7 +58,7 @@ app.post('/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(400).json({ success: false, message: 'Wrong password!' });
     const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ success: true, token, username });
+    res.json({ success: true, token, username, avatar: user.avatar, bio: user.bio });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -73,40 +71,40 @@ const io = new Server(server, {
 });
 
 const users = {};
+const profiles = {};
 
 io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
-
   socket.on('join_room', async ({ username, room }) => {
     socket.join(room);
     users[socket.id] = { username, room };
     const history = await Message.find({ room }).sort({ createdAt: 1 }).limit(50);
     socket.emit('message_history', history);
+    // Send existing profiles to new user
+    Object.entries(profiles).forEach(([u, p]) => {
+      socket.emit('user_profile', { username: u, avatar: p.avatar, bio: p.bio });
+    });
     io.to(room).emit('receive_message', {
-      username: 'System',
-      message: `${username} joined the room!`,
-      time: new Date().toLocaleTimeString(),
-      date: new Date().toISOString()
+      username: 'System', message: `${username} joined the room!`,
+      time: new Date().toLocaleTimeString(), date: new Date().toISOString()
     });
     const roomUsers = Object.values(users).filter(u => u.room === room);
     io.to(room).emit('room_users', roomUsers);
   });
 
+  socket.on('share_profile', ({ username, room, avatar, bio }) => {
+    profiles[username] = { avatar, bio };
+    io.to(room).emit('user_profile', { username, avatar, bio });
+  });
+
   socket.on('send_message', async ({ message, room, replyTo }) => {
     const user = users[socket.id];
     if (user) {
-      const time = new Date().toLocaleTimeString();
       const newMsg = new Message({ username: user.username, message, room, replyTo: replyTo || null });
       const saved = await newMsg.save();
       io.to(room).emit('receive_message', {
-        _id: saved._id,
-        username: user.username,
-        message,
-        time,
-        date: saved.createdAt,
-        reactions: {},
-        replyTo: replyTo || null,
-        readBy: [],
+        _id: saved._id, username: user.username, message,
+        time: new Date().toLocaleTimeString(), date: saved.createdAt,
+        reactions: {}, replyTo: replyTo || null, readBy: [],
       });
     }
   });
@@ -114,37 +112,23 @@ io.on('connection', (socket) => {
   socket.on('send_file', async ({ room, fileName, fileType, fileData }) => {
     const user = users[socket.id];
     if (user) {
-      const time = new Date().toLocaleTimeString();
       const newMsg = new Message({ username: user.username, room, fileUrl: fileData, fileType, fileName });
       const saved = await newMsg.save();
       io.to(room).emit('receive_message', {
-        _id: saved._id,
-        username: user.username,
-        fileUrl: fileData,
-        fileType,
-        fileName,
-        time,
-        date: saved.createdAt,
-        reactions: {},
-        readBy: [],
+        _id: saved._id, username: user.username, fileUrl: fileData, fileType, fileName,
+        time: new Date().toLocaleTimeString(), date: saved.createdAt, reactions: {}, readBy: [],
       });
     }
   });
 
   socket.on('edit_message', async ({ messageId, newMessage, room }) => {
-    const user = users[socket.id];
-    if (user) {
-      await Message.findByIdAndUpdate(messageId, { message: newMessage, edited: true });
-      io.to(room).emit('message_edited', { messageId, newMessage });
-    }
+    await Message.findByIdAndUpdate(messageId, { message: newMessage, edited: true });
+    io.to(room).emit('message_edited', { messageId, newMessage });
   });
 
   socket.on('delete_message', async ({ messageId, room }) => {
-    const user = users[socket.id];
-    if (user) {
-      await Message.findByIdAndUpdate(messageId, { deleted: true, message: '🗑️ Message deleted' });
-      io.to(room).emit('message_deleted', { messageId });
-    }
+    await Message.findByIdAndUpdate(messageId, { deleted: true, message: '🗑️ Message deleted' });
+    io.to(room).emit('message_deleted', { messageId });
   });
 
   socket.on('mark_read', async ({ messageId, room }) => {
@@ -192,10 +176,8 @@ io.on('connection', (socket) => {
     const user = users[socket.id];
     if (user) {
       io.to(user.room).emit('receive_message', {
-        username: 'System',
-        message: `${user.username} left the room.`,
-        time: new Date().toLocaleTimeString(),
-        date: new Date().toISOString()
+        username: 'System', message: `${user.username} left the room.`,
+        time: new Date().toLocaleTimeString(), date: new Date().toISOString()
       });
       delete users[socket.id];
       const roomUsers = Object.values(users).filter(u => u.room === user.room);
